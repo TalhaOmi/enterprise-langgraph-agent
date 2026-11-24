@@ -1,0 +1,31 @@
+# UNVERIFIED DRAFT. I could not run flyctl or read Fly's current docs from my workspace.
+# Check with `fly config validate` and the Fly configuration reference before using.
+app = "your-unique-app-name"
+primary_region = "yyz"            # Toronto; pick the region nearest your users
+
+[build]
+  dockerfile = "../Dockerfile"    # adjust if you run flyctl from the project root
+
+[env]
+  AGENT_ENV = "prod"
+  AGENT_LLM_MODEL = "anthropic:claude-sonnet-5-5"
+  AGENT_AUDIT_LOG_PATH = "/data/audit.log.jsonl"
+  AGENT_KILL_SWITCH_FILE = "/data/.kill_switch"
+  # Secrets are NOT set here. Use: fly secrets set AGENT_JWT_SECRET=... AGENT_CHECKPOINT_URL=... ANTHROPIC_API_KEY=...
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"      # keep it running: approvals live in memory (see docs/DEPLOY.md)
+  min_machines_running = 1        # EXACTLY ONE machine until the approval registry is persisted
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/healthz"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[mounts]
+  source = "agent_data"           # a volume so the audit log survives restarts
+  destination = "/data"

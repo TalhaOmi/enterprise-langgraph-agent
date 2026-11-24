@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
+      POSTGRES_DB: agent
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent"]
+      interval: 5s
+      retries: 10
+  api:
+    build: .
+    depends_on:
+      db: {condition: service_healthy}
+    ports: ["8000:8000"]
+    environment:
+      AGENT_ENV: ${AGENT_ENV:-dev}
+      AGENT_LLM_MODEL: ${AGENT_LLM_MODEL:-fake}
+      AGENT_JWT_SECRET: ${AGENT_JWT_SECRET:?set AGENT_JWT_SECRET}
+      AGENT_CHECKPOINT_URL: postgresql://agent:${DB_PASSWORD}@db:5432/agent
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes: [auditdata:/data]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  pgdata:
+  auditdata:

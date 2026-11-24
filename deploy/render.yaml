@@ -1,0 +1,28 @@
+# UNVERIFIED DRAFT. I could not read Render's current Blueprint docs from my workspace.
+# Validate in the Render dashboard (New > Blueprint) before relying on it.
+services:
+  - type: web
+    name: ent-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    numInstances: 1               # EXACTLY ONE until the approval registry is persisted (see docs/DEPLOY.md)
+    envVars:
+      - key: AGENT_ENV
+        value: prod
+      - key: AGENT_LLM_MODEL
+        value: anthropic:claude-sonnet-5-5
+      - key: AGENT_JWT_SECRET
+        generateValue: true       # Render creates a random value
+      - key: ANTHROPIC_API_KEY
+        sync: false               # you paste this in the dashboard; it is never stored in git
+      - key: AGENT_CHECKPOINT_URL
+        fromDatabase:
+          name: ent-agent-db
+          property: connectionString
+    disk:
+      name: agent-data
+      mountPath: /data
+      sizeGB: 1
+databases:
+  - name: ent-agent-db

@@ -1,0 +1,285 @@
+[
+  {
+    "id": "REQ-001",
+    "area": "Input guard",
+    "text": "When a user message matches a prompt-injection pattern, the system shall refuse it before it reaches the model.",
+    "need": "Attackers must not steer the agent (LLM01)",
+    "design": "input_guard node + route_after_guard",
+    "tests": [
+      "tests/test_guardrails.py::test_injection_attempts_blocked",
+      "tests/test_graph.py::test_prompt_injection_is_refused_before_model",
+      "tests/test_redteam.py::test_input_block_rate_is_100_percent"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-002",
+    "area": "Input guard",
+    "text": "When a user message contains PII or a secret, the system shall redact it before the message reaches the model.",
+    "need": "Sensitive data must not leak to a model provider (LLM02)",
+    "design": "guardrails/pii.py redact()",
+    "tests": [
+      "tests/test_guardrails.py::test_pii_detected_and_redacted",
+      "tests/test_graph.py::test_pii_is_redacted_before_it_reaches_the_model"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-003",
+    "area": "Input guard",
+    "text": "The system shall reject any message longer than 8000 characters.",
+    "need": "Cost and abuse control (LLM10)",
+    "design": "max_input_chars; API schema",
+    "tests": [
+      "tests/test_guardrails.py::test_length_cap_and_empty",
+      "tests/test_api.py::test_input_size_limit_enforced_by_schema"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-004",
+    "area": "Human approval",
+    "text": "When a refund is requested, the system shall pause for human approval and shall execute the refund exactly once after approval.",
+    "need": "Money must not move without a person agreeing",
+    "design": "interrupt() in approval_gate + idempotency key",
+    "tests": [
+      "tests/test_graph.py::test_refund_requires_human_approval_then_executes_once",
+      "tests/test_graph.py::test_rejected_refund_does_nothing"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-005",
+    "area": "Human approval",
+    "text": "If the approver is the same user as the requester, then the system shall reject the approval.",
+    "need": "Separation of duties",
+    "design": "approval_gate checks approver != requester",
+    "tests": [
+      "tests/test_graph.py::test_self_approval_is_rejected_by_the_graph_itself",
+      "tests/test_api.py::test_full_approval_flow_with_separation_of_duties"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-006",
+    "area": "Human approval",
+    "text": "If an approval arrives after 300 seconds, then the system shall treat it as a rejection.",
+    "need": "Stale approvals must not authorise actions",
+    "design": "approval_timeout_seconds",
+    "tests": [
+      "tests/test_api.py::test_expired_approval_is_treated_as_rejection"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-007",
+    "area": "Human approval",
+    "text": "If a refund exceeds 500.00, then the system shall deny it without asking a human.",
+    "need": "Hard financial limit",
+    "design": "refund_hard_limit in policy",
+    "tests": [
+      "tests/test_graph.py::test_refund_above_hard_limit_is_denied_without_asking_a_human"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-008",
+    "area": "Tool policy",
+    "text": "The system shall deny every tool call that the caller's role is not explicitly allowed to make.",
+    "need": "Least privilege, default deny (LLM06)",
+    "design": "guardrails/policy.py allowlists",
+    "tests": [
+      "tests/test_graph.py::test_viewer_role_cannot_use_order_tool",
+      "tests/test_platform.py::test_policy_default_deny_and_risk_tiers"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-009",
+    "area": "Tool policy",
+    "text": "The system shall reject any tool call whose arguments contain a field not in the tool's schema.",
+    "need": "Prevent argument smuggling",
+    "design": "pydantic models with extra=forbid",
+    "tests": [
+      "tests/test_platform.py::test_tool_args_are_strict"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-010",
+    "area": "Tenant isolation",
+    "text": "The system shall return only orders, documents and threads that belong to the caller's tenant.",
+    "need": "Customers must not see each other's data",
+    "design": "tenant filter before ranking; tenant:user:thread ids",
+    "tests": [
+      "tests/test_graph.py::test_tenant_isolation_for_orders",
+      "tests/test_graph.py::test_tenant_isolation_in_rag",
+      "tests/test_guardrails.py::test_rag_filters_by_tenant_and_role_before_ranking",
+      "tests/test_api.py::test_threads_are_namespaced_per_user"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-011",
+    "area": "Output guard",
+    "text": "If a response contains the system-prompt canary token or a secret, then the system shall block it and retry or fall back.",
+    "need": "Prevent system-prompt and secret leakage (LLM07)",
+    "design": "output_guard canary check",
+    "tests": [
+      "tests/test_graph.py::test_system_prompt_leak_is_caught_and_retried",
+      "tests/test_graph.py::test_leak_falls_back_when_retries_exhausted",
+      "tests/test_guardrails.py::test_output_canary_and_secret_are_hard_fails"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-012",
+    "area": "Output guard",
+    "text": "The system shall strip active content and markdown images from every response.",
+    "need": "Block markup-based data exfiltration",
+    "design": "output_guard strip",
+    "tests": [
+      "tests/test_graph.py::test_exfil_markup_is_stripped",
+      "tests/test_guardrails.py::test_output_strips_active_content_and_redacts_pii"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-013",
+    "area": "Output guard",
+    "text": "The system shall reject any answer that cites a document that was not retrieved.",
+    "need": "No fabricated citations (LLM09)",
+    "design": "citation grounding check",
+    "tests": [
+      "tests/test_graph.py::test_hallucinated_citation_is_rejected",
+      "tests/test_guardrails.py::test_output_citations_must_exist"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-014",
+    "area": "Limits",
+    "text": "The system shall stop an agent run after at most 6 steps.",
+    "need": "Prevent runaway loops and cost (LLM10)",
+    "design": "max_agent_steps; recursion_limit",
+    "tests": [
+      "tests/test_graph.py::test_runaway_loop_is_capped"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-015",
+    "area": "Audit",
+    "text": "The system shall record each action in an audit log in which altering any entry makes verification fail.",
+    "need": "Tamper-evident accountability",
+    "design": "hash-chained AuditLog",
+    "tests": [
+      "tests/test_platform.py::test_audit_chain_detects_tampering",
+      "tests/test_platform.py::test_audit_resumes_chain_after_restart",
+      "tests/test_graph.py::test_audit_trail_is_complete_and_verifies"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-016",
+    "area": "API security",
+    "text": "The system shall reject any request without a valid, unexpired token with the expected issuer and audience.",
+    "need": "Only authenticated callers",
+    "design": "JWT verify with pinned algorithm",
+    "tests": [
+      "tests/test_api.py::test_auth_required",
+      "tests/test_platform.py::test_jwt_roundtrip_and_rejections"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-017",
+    "area": "Limits",
+    "text": "The system shall reject requests from a user above 30 per minute.",
+    "need": "Abuse and cost control",
+    "design": "RateLimiter",
+    "tests": [
+      "tests/test_api.py::test_rate_limit",
+      "tests/test_platform.py::test_rate_limiter_window"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-018",
+    "area": "Limits",
+    "text": "While the kill switch is on, the system shall return 503 and shall not run the agent.",
+    "need": "Emergency stop",
+    "design": "controls.py kill switch",
+    "tests": [
+      "tests/test_api.py::test_kill_switch_returns_503",
+      "tests/test_graph.py::test_kill_switch_stops_the_agent"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-019",
+    "area": "Operations",
+    "text": "If the environment is prod and the configuration is insecure, then the system shall refuse to start.",
+    "need": "Fail closed",
+    "design": "Settings model_validator",
+    "tests": [
+      "tests/test_platform.py::test_prod_refuses_insecure_defaults"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-020",
+    "area": "Limits",
+    "text": "If the model provider fails 5 times in a row, then the system shall stop calling it for 30 seconds.",
+    "need": "Resilience against provider outage",
+    "design": "CircuitBreaker",
+    "tests": [
+      "tests/test_platform.py::test_circuit_breaker_opens_and_recovers"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-021",
+    "area": "Human approval",
+    "text": "The system shall keep a pending approval across a process restart and execute it exactly once on resume.",
+    "need": "Durability",
+    "design": "PostgresSaver checkpointer",
+    "tests": [
+      "tests/test_postgres_durability.py::test_pending_refund_survives_restart_and_runs_exactly_once"
+    ],
+    "method": "Test (opt-in, needs Postgres)"
+  },
+  {
+    "id": "REQ-022",
+    "area": "Network",
+    "text": "The system shall block outbound fetches to non-allowlisted or private addresses.",
+    "need": "SSRF defence",
+    "design": "guardrails/net.py validate_url",
+    "tests": [
+      "tests/test_guardrails.py::test_ssrf_blocked",
+      "tests/test_guardrails.py::test_allowlisted_https_ok"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-023",
+    "area": "UI",
+    "text": "The chat page shall insert server and model text as plain text and shall be served with a Content-Security-Policy that forbids inline script.",
+    "need": "Model output must not run as code in the browser",
+    "design": "textContent in chat.js; CSP header on /ui routes",
+    "tests": [
+      "tests/test_api.py::test_chat_ui_is_served_with_strict_csp",
+      "tests/test_api.py::test_chat_ui_needs_no_token_but_the_api_still_does"
+    ],
+    "method": "Test"
+  },
+  {
+    "id": "REQ-024",
+    "area": "Operations",
+    "text": "After every deployment, the operator shall run the smoke test and all 9 checks shall pass before traffic is accepted.",
+    "need": "A broken release must not reach users",
+    "design": "scripts/smoke_test.py",
+    "tests": [],
+    "method": "Demonstration"
+  }
+]
